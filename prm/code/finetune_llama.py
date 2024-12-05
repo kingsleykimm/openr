@@ -84,7 +84,7 @@ print('step_tag_id2:',tokenizer.encode(f"{step_tag2}"))
 model = AutoModelForCausalLM.from_pretrained(
     model_path,
     # load_in_8bit=True,   # Enables 8-bit quantization
-    # device_map="auto",   # Automatically assigns the model to available GPUs/CPUs
+    device_map="auto",   # Automatically assigns the model to available GPUs/CPUs
     torch_dtype=torch.bfloat16,  # Mixed precision for faster inference
     attn_implementation="flash_attention_2",
 )
@@ -93,15 +93,15 @@ model = AutoModelForCausalLM.from_pretrained(
 #     print(name)
 print(model)
 
-lora_config = LoraConfig(
-    task_type=TaskType.CAUSAL_LM,  # LoRA for causal language modeling task
-    r=8,  # Rank of LoRA
-    lora_alpha=32,  # Alpha scaling factor for LoRA
-    lora_dropout=0.1,  # Dropout rate for LoRA layers
-    target_modules=["q_proj", "v_proj"],  # Apply LoRA to specific layers
-)
+# lora_config = LoraConfig(
+#     task_type=TaskType.CAUSAL_LM,  # LoRA for causal language modeling task
+#     r=8,  # Rank of LoRA
+#     lora_alpha=32,  # Alpha scaling factor for LoRA
+#     lora_dropout=0.1,  # Dropout rate for LoRA layers
+#     target_modules=["q_proj", "v_proj"],  # Apply LoRA to specific layers
+# )
 
-model = get_peft_model(model, lora_config)
+# model = get_peft_model(model, lora_config)
 
 # model.to('cuda:0')
 print(model.device)
@@ -149,20 +149,21 @@ def preprocess_function(example):
 DATA_PATH = {
     # "train": 'multi-step.json', 
     # 'train': 'test.json',
-    "test": '../../datasets/processed_data/prm800k_test.json',
-    "train": "../../datasets/processed_data/math_aps.json",
+    # "test": '../../datasets/processed_data/prm800k_test.json',
+    # "train": "../../datasets/processed_data/math_aps.json",
     # "train": "../../datasets/processed_data/prm800k/data/phase2_train_new.jsonl",
     # "test": "../../datasets/prm800k-main/prm800k/data/phase2_test_new.jsonl",
+    "train" : "./phase2_test.new.json",
+    "test" : "./phase2_test.new.json",
     
 }
-dataset2 = load_dataset('json',data_files="../../datasets/processed_data/prm800k_train.json")
+# dataset2 = load_dataset('json',data_files="../../datasets/processed_data/prm800k_train.json")
 
 dataset = load_dataset('json', data_files=DATA_PATH)
 
 # print(dataset['train'][1000:1002])
 
-dataset['train'] = concatenate_datasets([dataset['train'], dataset2['train']])
-
+# dataset['train'] = concatenate_datasets([dataset['train'], dataset2['train']])
 # dataset['train'] = dataset['train'].select(range(10000))
 
 print('start processing')
@@ -259,6 +260,6 @@ trainer.train()
 # trainer.evaluate()
 
 # Save the fine-tuned model and tokenizer
-model.save_pretrained('./fine_tuned_llama_1b_mix_lora_16bit')
-tokenizer.save_pretrained('./fine_tuned_llama_1b_mix_lora_16bit')
+model.save_pretrained('./fine_tuned_llama_3b_full')
+tokenizer.save_pretrained('./fine_tuned_llama_3b_full')
 

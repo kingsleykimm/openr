@@ -35,7 +35,7 @@ class MSProcessRM(nn.Module):
         score = logits.softmax(dim=-1)[:, :, 0]
         
         step_scores = []
-        for i in range(np.shape(score)[0]):
+        for i in range(np.shape(score)[0]): # for each vectorized environment
             step_score = score[i][input_ids["input_ids"][i] == self.step_tag_id]
             last_step_score = step_score[-1]
             step_scores.append([last_step_score.item()])

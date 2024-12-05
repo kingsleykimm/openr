@@ -7,10 +7,12 @@ from tensorboardX import SummaryWriter
 from mat.agents.qwen_lora_agent import QwenLoRAgent
 from mat.models.ms_prm import MSProcessRM
 from mat.models.qwen_prm import QwenProcessRM
+from mat.models.ai_prm import LlemmaPRM
 from mat.utils.language_buffer import LanguageBuffer
 from mat.trainers.llm_trainer_appo import APPOTrainer
 from mat.trainers.llm_trainer_tppo import TPPOTrainer
 from mat.trainers.llm_trainer_grpo import GRPOTrainer
+
 
 def _t2n(x):
     return x.detach().cpu().numpy()
@@ -47,6 +49,8 @@ class MathRunner:
             self.prm = MSProcessRM(self.all_args)
         elif self.prm_type == "Qwen":
             self.prm = QwenProcessRM(self.all_args)
+        elif self.prm_type == "Llemma":
+            self.prm = LlemmaPRM(self.all_args)
         else:
             raise NotImplementedError
 

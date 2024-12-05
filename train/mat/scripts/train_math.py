@@ -2,6 +2,7 @@
 import sys
 import os
 import socket
+import time
 import setproctitle
 import numpy as np
 from pathlib import Path
@@ -94,12 +95,13 @@ def main(args):
     }
 
     runner = Runner(config)
+    start_time = time.time()
     runner.run()
     # runner.eval(0)
 
     runner.writter.export_scalars_to_json(str(runner.log_dir + '/summary.json'))
     runner.writter.close()
-
+    print(f"Running time: {time.time() - start_time}")
 
 if __name__ == "__main__":
     main(sys.argv[1:])

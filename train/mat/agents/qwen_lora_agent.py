@@ -33,7 +33,7 @@ class QwenLoRAgent:
         self.tokenizer.pad_token_id = 151655 # "<|image_pad|>"
         
         self.base_model = AutoModelForCausalLM.from_pretrained(model_name, 
-                                                               torch_dtype=torch.float16,
+                                                               torch_dtype=torch.bfloat16,
                                                                device_map="auto",
                                                                trust_remote_code=True)
         self.base_model.half().to(self.device)
@@ -48,7 +48,7 @@ class QwenLoRAgent:
             self.load(load_path)
         
     
-    def _init_actor(self, lora_weights = None):
+    def _init_actor(self, lora_weights = None): # let's leave LoRa on for now I just don't like it because of how much it sometimes degrades accuracy, and it's learning is not as good, obviously since it's lower rank
         if lora_weights is None:
             config = LoraConfig(
                 r=8,
