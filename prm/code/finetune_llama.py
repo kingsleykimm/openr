@@ -153,8 +153,8 @@ DATA_PATH = {
     # "train": "../../datasets/processed_data/math_aps.json",
     # "train": "../../datasets/processed_data/prm800k/data/phase2_train_new.jsonl",
     # "test": "../../datasets/prm800k-main/prm800k/data/phase2_test_new.jsonl",
-    "train" : "./phase2_test.new.json",
-    "test" : "./phase2_test.new.json",
+    "train" : "../../datasets/processed_data/prm800k/phase2_test.new.json",
+    "test" : "../../datasets/processed_data/prm800k/phase2_train.new.json",
     
 }
 # dataset2 = load_dataset('json',data_files="../../datasets/processed_data/prm800k_train.json")
