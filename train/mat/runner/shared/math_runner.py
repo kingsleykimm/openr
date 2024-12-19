@@ -7,8 +7,8 @@ from tensorboardX import SummaryWriter
 from mat.agents.qwen_lora_agent import QwenLoRAgent
 from mat.models.ms_prm import MSProcessRM
 from mat.models.qwen_prm import QwenProcessRM
-from mat.models.ai_prm import LlemmaPRM
-from mat.utils.language_buffer import LanguageBuffer
+from mat.models.ai_prm import AIPRM
+from mat.utils.language_buffer import LanguageBuffer, TrajectoryLanguageBuffer
 from mat.trainers.llm_trainer_appo import APPOTrainer
 from mat.trainers.llm_trainer_tppo import TPPOTrainer
 from mat.trainers.llm_trainer_grpo import GRPOTrainer
@@ -43,14 +43,17 @@ class MathRunner:
         self.envs = config['envs']
         self.eval_envs = config['eval_envs']
         self.agent = QwenLoRAgent(self.all_args.model_name_or_path, self.all_args.max_new_tokens, self.algo)
-        self.buffer = LanguageBuffer(self.all_args, self.num_agents, self.agent.tokenizer.pad_token_id)
+        if self.prm_type == "AI":
+            self.buffer = TrajectoryLanguageBuffer(self.all_args, self.num_agents, self.agent.tokenizer.pad_token_id)
+        else:
+            self.buffer = LanguageBuffer(self.all_args, self.num_agents, self.agent.tokenizer.pad_token_id)
         
         if self.prm_type == "MS":
             self.prm = MSProcessRM(self.all_args)
         elif self.prm_type == "Qwen":
             self.prm = QwenProcessRM(self.all_args)
-        elif self.prm_type == "Llemma":
-            self.prm = LlemmaPRM(self.all_args)
+        elif self.prm_type == "AI":
+            self.prm = AIPRM(self.all_args)
         else:
             raise NotImplementedError
 
@@ -66,34 +69,94 @@ class MathRunner:
     def run(self):
         obs = self.envs.reset()
         self.buffer.obs[0] = obs.copy()
-
+        last_obs = obs
         episodes = int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
-        
         episodic_returns = []
         for episode in range(episodes):
             total_num_steps = (episode + 1) * self.episode_length * self.n_rollout_threads  
-            for step in range(self.episode_length):
-                # Sample actions
-                values, actions, action_tokens, log_probs = self.collect(step)
+            # One episode is a reasoning trajectory - for PRM from AI feedback, we label the entire trajectory at the end
+            if self.prm_type != "AI":
+                for step in range(self.episode_length):
+                    # Sample actions
+                    values, actions, action_tokens, log_probs = self.collect(np.concatenate(self.buffer.obs[step]))
+                    
+                    # output rewards
+                    rewards = self.prm.get_reward(obs, actions)
+
+                    # Obs reward and next obs
+                    obs, fake_rewards, dones, infos = self.envs.step(actions)
+
+                    # insert data into buffer
+                    data = obs, rewards, dones, values, actions, action_tokens, log_probs
+                    self.insert(data)
+                    
+                    for i in range(self.n_rollout_threads):
+                        if dones[i, 0]:
+                            episodic_returns.append(rewards[i, 0])
+                            # add trajectories here
+                self.before_update()
+                train_infos = self.trainer.train(self.buffer)      
+                self.buffer.after_update()
+            else:
+                for step in range(self.episode_length):
+                    # Sample actions
+                    
+                    values, actions, action_tokens, log_probs = self.collect(np.concatenate(last_obs)) # change this for trajectory based
+                    
+                    # output rewards
+                    # rewards = self.prm.get_reward(obs, actions)
+
+                    # Obs reward and next obs
+                    last_obs, rewards, dones, infos = self.envs.extended_step(values, actions, action_tokens, log_probs) # annoying there here -- if it's done it's going to automaitcally reset
+                    # don't insert data, we're going to collect all this data for the n_rollout_threads. Then everytime one of them is done, we need to take the trajectory... maybe this is better to implement in subprocenv
+                    # data = obs, rewards, dones, values, actions, action_tokens, log_probs
+                    # self.insert(data)
+                    done_reasonings, actions, action_tokens, log_probs, values, traj_obs = [], [], [], [], [], []
+                    problems = []
+                    for i in range(self.n_rollout_threads):
+                        if dones[i, 0]: # dones, and any other thing returned from self.envs.step is going to be in the shape num_rollouts, num_agents
+                            # episodic_returns.append(rewards[i, 0])
+                            reasoning_chain, obs, action, action_token, log_prob, value, problem = infos[i]['trajectory'] # remember these are ALREADY COPIED NP ARRAYS of shape (max_steps (episode_length), n_agents (1))
+                            # action_token = self.pad_left(action_tokens, self.episode_length, pad_value=-100)
+                            print("Shapes", obs.shape, action.shape, action_token.shape, log_prob.shape, value.shape)
+                            actions.append(action)
+                            action_tokens.append(action_token)
+                            log_probs.append(log_prob)
+                            values.append(value)
+                            traj_obs.append(obs)
+                            done_reasonings.append(reasoning_chain)
+                            problems.append(problem)
+                            # get the rewards here
+                            # run it on trajectories?
+                            # add trajectories here
+                    # run a loop here with self.insert(). some notes > it's on every episode, we can delay it all to the end and add everything then? Or how do we still create accurate trajectory buffers because we can't ensure
+                    # we can make sure to only take the last (max_trajectories) in the buffer when doing the buffer adding, by making a rotating queue
+                    # empty out buffer after the update and start again.
+                    # max trajectories should be the number of rollout_threads * 1.5, to ensure some lenience inside each episode
+                    if len(done_reasonings) > 0:
+
+                        rewards = self.prm.get_reasoning_traj_reward(done_reasonings, problems) # (num_trajectories, max_length) numpy array
+                        for ind in range(len(done_reasonings)):
+                            if rewards[ind].shape[0] < self.episode_length:
+                                reward = np.pad(rewards[ind], self.episode_length, constant_values=-100)
+                            else:
+                                reward = rewards[ind][:self.episode_length]
+                            reward = np.expand_dims(reward, axis=-1)
+                            self.insert_trajectory((traj_obs[ind], reward, values[ind], actions[ind], action_tokens[ind], log_probs[ind])) # maintain buffer size by FIFO RULE
+                        
+                self.before_update()
+                train_infos = self.trainer.train(self.buffer)
+                self.buffer.after_update()
+
+                # train here + empty buffer
+
                 
-                # output rewards
-                rewards = self.prm.get_reward(obs, actions)
-
-                # Obs reward and next obs
-                obs, fake_rewards, dones, infos = self.envs.step(actions)
-
-                # insert data into buffer
-                data = obs, rewards, dones, values, actions, action_tokens, log_probs
-                self.insert(data)
-                
-                for i in range(self.n_rollout_threads):
-                    if dones[i, 0]:
-                        episodic_returns.append(rewards[i, 0])
-
+                        
+                # nice thing about having full trajectories: V_{t+1} is guaranteed to be 0
             # compute return and update network
-            self.before_update()
-            train_infos = self.trainer.train(self.buffer)      
-            self.buffer.after_update()
+
+
+            
             
             # save model
             if (episode == episodes - 1 or episode % self.save_interval == 0):
@@ -114,8 +177,9 @@ class MathRunner:
         
 
     @torch.no_grad()
-    def collect(self, step):
-        behaviour_data = self.agent.infer_for_rollout(np.concatenate(self.buffer.obs[step]))
+    def collect(self, recent_obs): # collects agent actions for N envs
+        print(recent_obs.shape)
+        behaviour_data = self.agent.infer_for_rollout(recent_obs)
         
         actions, action_tokens, values, log_probs = behaviour_data
         
@@ -126,26 +190,46 @@ class MathRunner:
         log_probs = np.array(np.split(log_probs, self.n_rollout_threads))
 
         return values, actions, action_tokens, log_probs
+    
+    @torch.no_grad()
 
-    def insert(self,data):
+    def insert(self, data):
         obs, rewards, dones, values, actions, action_tokens, log_probs = data
-
-        dones_env = np.all(dones, axis=1)
-        masks = np.ones((self.n_rollout_threads, self.num_agents), dtype=np.float32)
-        masks[dones_env == True] = np.zeros(((dones_env == True).sum(), self.num_agents), dtype=np.float32)
-
+        # num agents is always one anyways?
+        dones_env = np.all(dones, axis=1) # gives indices of envs that are done
+        masks = np.ones((self.n_rollout_threads, self.num_agents), dtype=np.float32) # create mask of size (# of envs, # of agents (1))
+        masks[dones_env == True] = np.zeros(((dones_env == True).sum(), self.num_agents), dtype=np.float32) # 
         if self.algo == "APPO" or self.algo == "GRPO":
             self.buffer.insert_appo(obs, actions, values, rewards, masks, action_tokens, log_probs)
         elif self.algo == "TPPO":
             self.buffer.insert_tppo(obs, actions, values, rewards, masks, action_tokens, log_probs)
         else:
             raise NotImplementedError
+    def insert_trajectory(self, data):
+        obs, rewards, values, actions, action_tokens, log_probs = data
+        print("traj shapes", obs.shape, rewards.shape, values.shape, actions.shape, action_tokens.shape, log_probs.shape)
+        # num agents is always one anyways?
+        if self.algo == "APPO" or self.algo == "GRPO":
+            self.buffer.insert_appo(obs, actions, values, rewards, action_tokens, log_probs)
+        elif self.algo == "TPPO":
+            self.buffer.insert_tppo(obs, actions, values, rewards, action_tokens, log_probs)
+        else:
+            raise NotImplementedError
+
+    def pad_left(self, array, max_length, pad_value=0):
+        """Pad an array on the left to reach the specified maximum length."""
+        pad_width = max_length - array.shape[0]
+        if pad_width <= 0:
+            return array  # No padding needed
+        return np.pad(array, (pad_width, 0), mode='constant', constant_values=pad_value)
 
     @torch.no_grad()
     def before_update(self):
-        """Calculate returns for the collected data."""
-        next_values = self.agent.get_next_values(np.concatenate(self.buffer.obs[-1]))
-        next_values = np.array(np.split(next_values, self.n_rollout_threads))
+        """Calculate returns for the collected data.""" # (through bellman backup)
+        next_values = -100
+        if self.prm_type != "AI":
+            next_values = self.agent.get_next_values(np.concatenate(self.buffer.obs[-1]))
+            next_values = np.array(np.split(next_values, self.n_rollout_threads))
         if self.algo == "APPO":
             self.buffer.batch_process_appo(next_values)
         elif self.algo == "TPPO":
@@ -158,7 +242,6 @@ class MathRunner:
     def log_infos(self, infos, total_num_steps):
         for k, v in infos.items():
             self.writter.add_scalars(k, {k: v}, total_num_steps)
-    
     @torch.no_grad()
     def eval(self, total_num_steps):
         eval_episode = 0
@@ -190,5 +273,6 @@ class MathRunner:
     def restore(self, model_dir):
         """Restore policy's networks from a saved model."""
         self.agent.restore(model_dir)
+
 
 

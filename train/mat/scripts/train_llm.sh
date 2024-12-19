@@ -1,9 +1,9 @@
 #!/bin/sh
 #
-#SBATCH -t 24:00:00
-#SBATCH -A _
+#SBATCH -t 36:00:00
+#SBATCH -A cywlab
 #SBATCH --partition=gpu
-#SBATCH --gres=gpu:a100:3
+#SBATCH --gres=gpu:a100:2
 #SBATCH --constraint=a100_80gb
 #SBATCH --ntasks=1
 #SBATCH -o out.txt
@@ -12,12 +12,13 @@
                 --dataset_name "prealgebra" \
                 --dataset_path "../envs/math/data/math_500.jsonl" \
                 --model_name_or_path "../../../models/Qwen2.5-1.5B-Instruct/" \
-                --prm_type "LLEMMA" \
-                --prm_model_name_or_path "../../../models/llemma_34b/" \
+                --prm_type "AI" \
+                --prm_model_name_or_path "../../../models/Qwen2.5-72B-Instruct/" \
                 --algorithm_name "GRPO" \
                 --experiment_name "llemma_grpo_single_epoch" \
                 --num_mini_batch 4 \
-                --ppo_epoch 1
+                --ppo_epoch 1 \
+                --max_new_tokens 144
 
 
 

@@ -11,12 +11,15 @@ sys.path.append("../../")
 from mat.config import get_config
 from mat.envs.math.math_env_wrappers import ShareSubprocVecEnv, ShareDummyVecEnv
 from mat.runner.shared.math_runner import MathRunner as Runner
-from mat.envs.math.math_env import MathEnv
+from mat.envs.math.math_env import MathEnv, TrajectoryMathEnv
 
 def make_train_env(all_args):
     def get_env_fn(rank):
         def init_env():
-            env = MathEnv(rank=rank, dataset_name=all_args.dataset_name, dataset_path=all_args.dataset_path, mode="train")
+            if all_args.prm_type == "AI":
+                env = TrajectoryMathEnv(rank=rank, dataset_name=all_args.dataset_name, dataset_path=all_args.dataset_path, mode="train", max_steps=all_args.episode_length, max_new_tokens=all_args.max_new_tokens)
+            else:
+                env = MathEnv(rank=rank, dataset_name=all_args.dataset_name, dataset_path=all_args.dataset_path, mode="train", max_steps=all_args.episode_length)
             env.seed(all_args.seed + rank * 1000)
             return env
         return init_env
@@ -25,7 +28,7 @@ def make_train_env(all_args):
 def make_eval_env(all_args):
     def get_env_fn(rank):
         def init_env():
-            env = MathEnv(rank=rank, dataset_name=all_args.dataset_name, dataset_path=all_args.dataset_path, mode="test")
+            env = MathEnv(rank=rank, dataset_name=all_args.dataset_name, dataset_path=all_args.dataset_path, mode="test", max_steps=all_args.episode_length)
             env.seed(all_args.seed + rank * 5000)
             return env
         return init_env
@@ -68,9 +71,9 @@ def main(args):
     parser = get_config()
     all_args = parse_args(args, parser)
 
-    all_args.num_env_steps = 50000
+    all_args.num_env_steps = 500
     all_args.episode_length = 8
-    all_args.n_rollout_threads = 4
+    all_args.n_rollout_threads = 1
     all_args.log_interval = 1
     all_args.critic_lr = 5e-5
     all_args.lr = 1e-6

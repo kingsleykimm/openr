@@ -32,10 +32,10 @@ class QwenLoRAgent:
         self.tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True, padding_side='left', trust_remote_code=True)
         self.tokenizer.pad_token_id = 151655 # "<|image_pad|>"
         
-        self.base_model = AutoModelForCausalLM.from_pretrained(model_name, 
-                                                               torch_dtype=torch.bfloat16,
-                                                               device_map="auto",
-                                                               trust_remote_code=True)
+        self.base_model = AutoModelForCausalLM.from_pretrained(
+                                                    model_name,
+                                                    torch_dtype="auto",
+                                                    device_map="cuda")
         self.base_model.half().to(self.device)
         
         self.max_new_tokens = max_new_tokens
@@ -48,7 +48,7 @@ class QwenLoRAgent:
             self.load(load_path)
         
     
-    def _init_actor(self, lora_weights = None): # let's leave LoRa on for now I just don't like it because of how much it sometimes degrades accuracy, and it's learning is not as good, obviously since it's lower rank
+    def _init_actor(self, lora_weights = None):
         if lora_weights is None:
             config = LoraConfig(
                 r=8,
@@ -234,8 +234,10 @@ class QwenLoRAgent:
     
     @torch.no_grad()
     def infer_for_rollout(self, obs):
+        # obs is just a np array of length rollouts
         actions, action_tokens = self.get_actions(obs)
-        
+        # actions is a np of shape (num_rollouts,)
+        # action_tokens is shape (num_rollouts, max_new_tokens)
         if self.algo == "APPO":
             values = self.get_action_values(obs)
             values = values.float().cpu().numpy()
@@ -360,4 +362,3 @@ class QwenLoRAgent:
     def eval(self):
         self.generator.eval()
         self.critic.eval()
-

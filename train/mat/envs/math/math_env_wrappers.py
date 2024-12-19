@@ -117,7 +117,7 @@ def shareworker(remote, parent_remote, env_fn_wrapper):
         cmd, data = remote.recv()
         if cmd == 'step':
             ob, reward, done, info = env.step(data)
-            if 'bool' in done.__class__.__name__:
+            if 'bool' in done.__class__.__name__: # this is where it automatically resets
                 if done:
                     ob = env.reset()
             else:
@@ -125,6 +125,18 @@ def shareworker(remote, parent_remote, env_fn_wrapper):
                     ob = env.reset()
 
             remote.send((ob, reward, done, info))
+        elif cmd == 'extended_step':
+            ob, reward, done, info = env.step(*data)
+            
+            if 'bool' in done.__class__.__name__:
+                if done:
+                    info['trajectory'] = env.get_trajectory()
+                    ob = env.reset()
+            else:
+                if np.all(done):
+                    info['trajectory'] = env.get_trajectory()
+                    ob = env.reset()
+            remote.send((ob, reward, done, info)) # info here can be the finished trajectory when trigger
         elif cmd == 'reset':
             ob = env.reset()
             remote.send((ob))
@@ -174,6 +186,29 @@ class ShareSubprocVecEnv(ShareVecEnv):
         self.waiting = False
         obs, rews, dones, infos = zip(*results)
         return np.stack(obs), np.stack(rews), np.stack(dones), infos
+        
+    def extended_step(self, values, actions, action_tokens, log_probs):
+        self.extended_step_async(values, actions, action_tokens, log_probs)
+        return self.extended_step_wait()
+
+    def extended_step_async(self, values, actions, action_tokens, log_probs):
+        """
+        Extended version of the environment step function. Should only be used with TrajectoryMathEnv.
+        """
+        for remote, value, action, action_token, log_prob in zip(self.remotes, values, actions, action_tokens, log_probs):
+            # print(value, action, action_token, log_prob)
+            remote.send(('extended_step', (value, action, action_token, log_prob)))
+        self.waiting = True
+
+    def extended_step_wait(self):
+        results = [remote.recv() for remote in self.remotes] 
+        # results is a list of (ob, reward, done, info) tuples
+        # remember that each is ob is a np (1) arr, as well as done
+        self.waiting = False
+        obs, rewards, dones, infos = zip(*results)
+
+        return np.stack(obs), rewards, np.stack(dones), infos # rewards are fake anyways
+
 
     def reset(self):
         for remote in self.remotes:

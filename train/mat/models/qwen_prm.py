@@ -26,10 +26,10 @@ class QwenProcessRM(nn.Module):
         self.model = AutoModelForCausalLM.from_pretrained(self.model_name_or_path, 
                                                           device_map="auto", 
                                                           torch_dtype=torch.bfloat16,
-                                                        #   attn_implementation="flash_attention_2",
+                                                          attn_implementation="flash_attention_2",
                                                           ).eval()
         # adapter_config = PeftConfig.from_pretrained(cp_path)
-        self.model = PeftModel.from_pretrained(self.model, self.prm_checkpoint_path)
+        # self.model = PeftModel.from_pretrained(self.model, self.prm_checkpoint_path)
         
     @torch.no_grad()
     def get_reward(self, obs: list[np.ndarray[str]], actions: list[np.ndarray[str]]):
