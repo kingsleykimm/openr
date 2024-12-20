@@ -32,7 +32,7 @@ Score each reasoning step from -5 to 5. Please carefully check the calculation a
 A step can achieve high score if it contribute to the final solution (i.e. removing it will likely result in incorrect answer). 
 If a step is correct but you think is redundant and not necessary for the final solution, you can give a small negative score. Every reasoning step is a sentence.  
 This problem is known to have incorrect answer, which means at least one reasoning step is incorrect. If an answer is not provided, use your best judgement.
-For each step, output your answer in the format: ### Step [Step Number]: Score [Choose any numebr between -5 to 5 to rate the step].
+For each step, output your answer in the format: ### Step [Step Number]: Score [Choose any number between -5 to 5 to rate the step]. An example step score is: ### Step 3: Score 2.
 """
 
 
@@ -88,11 +88,14 @@ class AIPRM(nn.Module):
         # This should take in an entire step trajectory for each of the 
         # trajectory is a list of strings of the entire model prompt separated by \n
         templated_trajs = []
+        max_traj_length = 0
         for traj, problem in zip(trajectories, problems): 
             steps = traj[len(problem) + 1:].replace('\n', ' ').split('ки')[:-1] # split up steps, take out the last dummy empty string
             new_traj = '\n'.join([f"Step {ind + 1}: {steps[ind]} ки"for ind in range(len(steps))])
             new_traj = problem + '\n' + new_traj
-            print(new_traj)
+            # print(new_traj)
+            print("Num steps")
+            max_traj_length = max(len(new_traj.split(' ')), max_traj_length)
             conversation = [
                 {
                     "role" : "system",
@@ -114,7 +117,7 @@ class AIPRM(nn.Module):
         output_ids = self.model.generate(
             **tokenized_chats,
             do_sample=False,
-            max_new_tokens=tokenized_chats.input_ids.shape[1]
+            max_new_tokens=max_traj_length
         )
         outputs_trimmed = [outputs[inputs.shape[0]:] for inputs, outputs in zip(tokenized_chats.input_ids, output_ids)]
         decoded_outputs = self.tokenizer.batch_decode(

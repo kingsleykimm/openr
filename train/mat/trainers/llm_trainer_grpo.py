@@ -53,7 +53,14 @@ class GRPOTrainer:
         # policy update
         self.policy_optimizer.zero_grad()
         cp_batch_size = int(batch_size // self.gradient_cp_steps)
-        # print("checkpoint batch size", cp_batch_size, "batch size ", batch_size)
+        # batch_size < self.gradient_cp_steps
+        # need to fix checkpointing batch size
+        print("checkpoint batch size", cp_batch_size, "batch size ", batch_size)
+        if batch_size == 0:
+            print("ZERO BATCH SIZE")
+            return 0, 0
+        if cp_batch_size == 0:
+            cp_batch_size = batch_size
         total_approx_kl = 0
         for start in range(0, batch_size, cp_batch_size):
             end = start + cp_batch_size

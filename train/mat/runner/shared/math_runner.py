@@ -67,13 +67,13 @@ class MathRunner:
             raise NotImplementedError
 
     def run(self):
-        obs = self.envs.reset()
-        self.buffer.obs[0] = obs.copy()
-        last_obs = obs
-        episodes = int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
+        
         episodic_returns = []
         self.total_num_steps = 0
         if self.prm_type != 'AI':
+            obs = self.envs.reset()
+            self.buffer.obs[0] = obs.copy()
+            episodes = int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
             for episode in range(episodes):
                 # One episode is a reasoning trajectory - for PRM from AI feedback, we label the entire trajectory at the end
                 self.total_num_steps = (episode + 1) * self.episode_length * self.n_rollout_threads
@@ -112,7 +112,8 @@ class MathRunner:
 
         else:
             while self.total_num_steps < self.num_env_steps:
-                for step in range(self.episode_length):
+                last_obs = self.envs.reset() # need to do this so we don't have old policy environments getting added to our buffer
+                for step in range(int(self.episode_length * 1.5)): # for more chances of collecting trajectories, since episode_length = max_step_envs
                     # Sample actions
                     values, actions, action_tokens, log_probs = self.collect(np.concatenate(last_obs)) # change this for trajectory based
                     # Obs reward and next obs
@@ -205,7 +206,7 @@ class MathRunner:
     def insert_trajectory(self, data):
         obs, rewards, values, actions, action_tokens, log_probs = data
         # print("traj shapes", obs.shape, rewards.shape, values.shape, actions.shape, action_tokens.shape, log_probs.shape)
-        self.total_num_steps += rewards.ne(-100).count_nonzero()
+        self.total_num_steps += np.count_nonzero(rewards != -100)
         # num agents is always one anyways?
         if self.algo == "APPO" or self.algo == "GRPO":
             self.buffer.insert_appo(obs, actions, values, rewards, action_tokens, log_probs)

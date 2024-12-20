@@ -167,7 +167,7 @@ class QwenLoRAgent:
         return values
     
     def get_token_logits(self, obs, action_tokens, batch_infer=False):
-        
+        print(obs.tolist())
         obs_token_seq = self.tokenizer(obs.tolist(), return_tensors="pt", padding=True)
         obs_input_ids = obs_token_seq["input_ids"].to("cuda")
         obs_attn_mask = obs_token_seq["attention_mask"].to("cuda")
