@@ -303,17 +303,25 @@ class TrajectoryLanguageBuffer(LanguageBuffer):
 
 
         # IMO, the biggest isue with trajectory buffers is that if there is a high proportion of trajectories that end early then it is data inefficient
-        obs = self.obs[:, :-1, :].reshape(-1) # turns into a 1D array of size (max_trajectories, episode_length)
-        actions = self.actions.reshape(-1)
-        value_preds = self.action_level_v_values[:, :-1, :].reshape(-1)
-        returns = self.action_level_returns.reshape(-1)
-        advantages = self.action_level_advantages.reshape(-1)
-        log_prob = self.action_level_log_probs.reshape(-1)
-        action_tokens = self.action_tokens.reshape(-1)
-        masks = self.masks[:, :-1, :].reshape(-1)
+        # obs = self.obs[:, :-1, :].reshape(-1) # turns into a 1D array of size (max_trajectories, episode_length)
+        # actions = self.actions.reshape(-1)
+        # value_preds = self.action_level_v_values[:, :-1, :].reshape(-1)
+        # returns = self.action_level_returns.reshape(-1)
+        # advantages = self.action_level_advantages.reshape(-1)
+        # log_prob = self.action_level_log_probs.reshape(-1)
+        # action_tokens = self.action_tokens.reshape(-1, self.max_new_tokens)
+        # masks = self.masks[:, :-1, :].reshape(-1, self.masks.shape[2:])
+
+        obs = self.obs[:, :-1].reshape(-1, *self.obs.shape[2:])
+        actions = self.actions.reshape(-1, *self.actions.shape[2:])
+        value_preds = self.action_level_v_values[:, :-1].reshape(-1, *self.action_level_v_values.shape[2:])
+        returns = self.action_level_returns.reshape(-1, *self.action_level_returns.shape[2:])
+        advantages = self.action_level_advantages.reshape(-1, *self.action_level_advantages.shape[2:])
+        log_prob = self.action_level_log_probs.reshape(-1, *self.action_level_log_probs.shape[2:])
+        action_tokens = self.action_tokens.reshape(-1, *self.action_tokens.shape[2:])
+        masks = self.masks[:, :-1].reshape(-1, *self.masks.shape[2:])
         #find valid indicies here, after flattening everything into a 1D array
         valid_indices = np.nonzero(masks)
-        print(valid_indices, masks, self.masks, self.action_level_v_values)
         batch_size = valid_indices[0].shape[0]
 
         if mini_batch_size is None:
@@ -324,15 +332,14 @@ class TrajectoryLanguageBuffer(LanguageBuffer):
         rand = np.arange(batch_size)
         np.random.shuffle(rand)
         sampler = [rand[i * mini_batch_size:(i + 1) * mini_batch_size] for i in range(num_mini_batch)]
-
         for indices in sampler:
-            obs_batch = obs[sampler[indices]]
-            action_batch = actions[sampler[indices]]
-            value_preds_batch = value_preds[sampler[indices]]
-            return_batch = returns[sampler[indices]]
-            advantages_batch = advantages[sampler[indices]]
-            log_prob_batch = log_prob[sampler[indices]]
-            action_tokens_batch = action_tokens[sampler[indices]]
+            obs_batch = obs[indices]
+            action_batch = actions[indices]
+            value_preds_batch = value_preds[indices]
+            return_batch = returns[indices]
+            advantages_batch = advantages[indices]
+            log_prob_batch = log_prob[indices]
+            action_tokens_batch = action_tokens[indices]
             yield obs_batch, action_batch, log_prob_batch, value_preds_batch, return_batch, advantages_batch, action_tokens_batch
 
         # flatten all of them

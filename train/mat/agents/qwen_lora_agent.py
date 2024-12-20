@@ -72,7 +72,7 @@ class QwenLoRAgent:
             model = PeftModel.from_pretrained(
                 self.base_model,
                 lora_weights,
-                torch_dtype=torch.float16,
+                torch_dtype=torch.bfloat16,
             )
 
         # if torch.__version__ >= "2" and sys.platform != "win32":
@@ -122,7 +122,7 @@ class QwenLoRAgent:
                                    dtype=torch.int64).to("cuda") * self.tokenizer.pad_token_id
         for i in range(sequences.shape[0]):
             action_token = sequences[i][input_ids[i].shape[0]:]
-            action_tokens[i, :action_token.shape[0]] = action_token
+            action_tokens[i, :action_token.shape[0]] = action_token # doesn't actually fill it all the way with pad_token_ids
             action = self.tokenizer.decode(action_token, skip_special_tokens=True)
             actions.append(action)
         actions = np.array(actions, dtype=np.object_)
@@ -173,11 +173,12 @@ class QwenLoRAgent:
         obs_attn_mask = obs_token_seq["attention_mask"].to("cuda")
         obs_full_lengths = obs_input_ids.shape[1]
         
-        act_attn_mask = (action_tokens != 0)
+        act_attn_mask = (action_tokens != self.tokenizer.pad_token_id)
         act_real_lengths = act_attn_mask.sum(dim=1)
         
         obs_act_ids = torch.cat([obs_input_ids, action_tokens], dim=1)
         obs_act_mask = torch.cat([obs_attn_mask, act_attn_mask], dim=1)
+
         
         if batch_infer:
             with self.actor.disable_adapter():
@@ -191,7 +192,6 @@ class QwenLoRAgent:
                 
             pi_outputs = self.actor(input_ids=obs_act_ids, attention_mask=obs_act_mask, return_dict=True)
             pi_logits = self.get_slice(pi_outputs.logits, obs_full_lengths, act_real_lengths)
-        
         return pi_logits, rho_logits
     
     def batch_infer(self, model, input_ids, attn_mask, obs_full_lengths, act_real_lengths, infer_batch_size=16):     

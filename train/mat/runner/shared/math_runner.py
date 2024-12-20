@@ -72,10 +72,11 @@ class MathRunner:
         last_obs = obs
         episodes = int(self.num_env_steps) // self.episode_length // self.n_rollout_threads
         episodic_returns = []
-        for episode in range(episodes):
-            total_num_steps = (episode + 1) * self.episode_length * self.n_rollout_threads  
-            # One episode is a reasoning trajectory - for PRM from AI feedback, we label the entire trajectory at the end
-            if self.prm_type != "AI":
+        self.total_num_steps = 0
+        if self.prm_type != 'AI':
+            for episode in range(episodes):
+                # One episode is a reasoning trajectory - for PRM from AI feedback, we label the entire trajectory at the end
+                self.total_num_steps = (episode + 1) * self.episode_length * self.n_rollout_threads
                 for step in range(self.episode_length):
                     # Sample actions
                     values, actions, action_tokens, log_probs = self.collect(np.concatenate(self.buffer.obs[step]))
@@ -97,15 +98,23 @@ class MathRunner:
                 self.before_update()
                 train_infos = self.trainer.train(self.buffer)      
                 self.buffer.after_update()
-            else:
+                if (episode == episodes - 1 or episode % self.save_interval == 0):
+                    self.save(episode)
+
+            # log information
+                if episode % self.log_interval == 0:
+                    print("total_num_steps: ", self.total_num_steps)
+                    print("average_step_rewards: ", np.mean(self.buffer.rewards))
+                    train_infos["average_step_rewards"] = np.mean(self.buffer.rewards)
+                    train_infos["average_currect_rate"] = np.mean(episodic_returns)
+                    self.log_infos(train_infos, self.total_num_steps)
+                    episodic_returns = []
+
+        else:
+            while self.total_num_steps < self.num_env_steps:
                 for step in range(self.episode_length):
                     # Sample actions
-                    
                     values, actions, action_tokens, log_probs = self.collect(np.concatenate(last_obs)) # change this for trajectory based
-                    
-                    # output rewards
-                    # rewards = self.prm.get_reward(obs, actions)
-
                     # Obs reward and next obs
                     last_obs, rewards, dones, infos = self.envs.extended_step(values, actions, action_tokens, log_probs) # annoying there here -- if it's done it's going to automaitcally reset
                     # don't insert data, we're going to collect all this data for the n_rollout_threads. Then everytime one of them is done, we need to take the trajectory... maybe this is better to implement in subprocenv
@@ -118,7 +127,7 @@ class MathRunner:
                             # episodic_returns.append(rewards[i, 0])
                             reasoning_chain, obs, action, action_token, log_prob, value, problem = infos[i]['trajectory'] # remember these are ALREADY COPIED NP ARRAYS of shape (max_steps (episode_length), n_agents (1))
                             # action_token = self.pad_left(action_tokens, self.episode_length, pad_value=-100)
-                            print("Shapes", obs.shape, action.shape, action_token.shape, log_prob.shape, value.shape)
+                            # print("Shapes", obs.shape, action.shape, action_token.shape, log_prob.shape, value.shape))
                             actions.append(action)
                             action_tokens.append(action_token)
                             log_probs.append(log_prob)
@@ -138,7 +147,7 @@ class MathRunner:
                         rewards = self.prm.get_reasoning_traj_reward(done_reasonings, problems) # (num_trajectories, max_length) numpy array
                         for ind in range(len(done_reasonings)):
                             if rewards[ind].shape[0] < self.episode_length:
-                                reward = np.pad(rewards[ind], self.episode_length, constant_values=-100)
+                                reward = self.pad_right(rewards[ind], self.episode_length, pad_value=-100)
                             else:
                                 reward = rewards[ind][:self.episode_length]
                             reward = np.expand_dims(reward, axis=-1)
@@ -147,29 +156,18 @@ class MathRunner:
                 self.before_update()
                 train_infos = self.trainer.train(self.buffer)
                 self.buffer.after_update()
-
-                # train here + empty buffer
-
-                
-                        
-                # nice thing about having full trajectories: V_{t+1} is guaranteed to be 0
-            # compute return and update network
-
-
-            
-            
-            # save model
-            if (episode == episodes - 1 or episode % self.save_interval == 0):
-                self.save(episode)
+                if (episode == episodes - 1 or episode % self.save_interval == 0):
+                    self.save(episode)
 
             # log information
-            if episode % self.log_interval == 0:
-                print("total_num_steps: ", total_num_steps)
-                print("average_step_rewards: ", np.mean(self.buffer.rewards))
-                train_infos["average_step_rewards"] = np.mean(self.buffer.rewards)
-                train_infos["average_currect_rate"] = np.mean(episodic_returns)
-                self.log_infos(train_infos, total_num_steps)
-                episodic_returns = []
+                if episode % self.log_interval == 0:
+                    print("total_num_steps: ", self.total_num_steps)
+                    print("average_step_rewards: ", np.mean(self.buffer.rewards))
+                    train_infos["average_step_rewards"] = np.mean(self.buffer.rewards)
+                    train_infos["average_currect_rate"] = np.mean(episodic_returns)
+                    self.log_infos(train_infos, self.total_num_steps)
+                    episodic_returns = []
+
 
             # eval
             # if self.all_args.use_eval and episode % self.eval_interval == 0:
@@ -178,7 +176,6 @@ class MathRunner:
 
     @torch.no_grad()
     def collect(self, recent_obs): # collects agent actions for N envs
-        print(recent_obs.shape)
         behaviour_data = self.agent.infer_for_rollout(recent_obs)
         
         actions, action_tokens, values, log_probs = behaviour_data
@@ -207,7 +204,8 @@ class MathRunner:
             raise NotImplementedError
     def insert_trajectory(self, data):
         obs, rewards, values, actions, action_tokens, log_probs = data
-        print("traj shapes", obs.shape, rewards.shape, values.shape, actions.shape, action_tokens.shape, log_probs.shape)
+        # print("traj shapes", obs.shape, rewards.shape, values.shape, actions.shape, action_tokens.shape, log_probs.shape)
+        self.total_num_steps += rewards.ne(-100).count_nonzero()
         # num agents is always one anyways?
         if self.algo == "APPO" or self.algo == "GRPO":
             self.buffer.insert_appo(obs, actions, values, rewards, action_tokens, log_probs)
@@ -216,12 +214,12 @@ class MathRunner:
         else:
             raise NotImplementedError
 
-    def pad_left(self, array, max_length, pad_value=0):
+    def pad_right(self, array, max_length, pad_value=0):
         """Pad an array on the left to reach the specified maximum length."""
         pad_width = max_length - array.shape[0]
         if pad_width <= 0:
             return array  # No padding needed
-        return np.pad(array, (pad_width, 0), mode='constant', constant_values=pad_value)
+        return np.pad(array, (0, pad_width), mode='constant', constant_values=pad_value)
 
     @torch.no_grad()
     def before_update(self):

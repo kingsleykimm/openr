@@ -45,14 +45,15 @@ class GRPOTrainer:
         obs_batch, action_batch, log_prob_batch, \
             value_preds_batch, return_batch, advantages_batch, action_tokens_batch = sample
 
+
         log_prob_batch = torch.from_numpy(log_prob_batch).to("cuda")
         advantages_batch = torch.from_numpy(advantages_batch).to("cuda")
         action_tokens_batch = torch.from_numpy(action_tokens_batch).to("cuda")
         batch_size = obs_batch.shape[0]
-
         # policy update
         self.policy_optimizer.zero_grad()
         cp_batch_size = int(batch_size // self.gradient_cp_steps)
+        # print("checkpoint batch size", cp_batch_size, "batch size ", batch_size)
         total_approx_kl = 0
         for start in range(0, batch_size, cp_batch_size):
             end = start + cp_batch_size
@@ -62,7 +63,8 @@ class GRPOTrainer:
             log_prob_infer = log_prob_infer.view(obs_batch[start:end].shape[0], -1)
             
             cp_adv_batch = advantages_batch[start:end]
-            cp_adv_batch = (cp_adv_batch - cp_adv_batch.mean()) / (cp_adv_batch.std() + 1e-8)
+            if cp_adv_batch.numel() > 1:
+                cp_adv_batch = (cp_adv_batch - cp_adv_batch.mean()) / (cp_adv_batch.std() + 1e-8)
             
             entropy = entropy.view(obs_batch[start:end].shape[0], -1)
             policy_loss, approx_kl = self.cal_policy_loss(log_prob_infer, log_prob_batch[start:end], cp_adv_batch, entropy)
