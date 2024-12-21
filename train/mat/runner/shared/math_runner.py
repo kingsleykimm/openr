@@ -111,6 +111,7 @@ class MathRunner:
                     episodic_returns = []
 
         else:
+            episode = 0
             while self.total_num_steps < self.num_env_steps:
                 last_obs = self.envs.reset() # need to do this so we don't have old policy environments getting added to our buffer
                 for step in range(int(self.episode_length * 1.5)): # for more chances of collecting trajectories, since episode_length = max_step_envs
@@ -157,17 +158,18 @@ class MathRunner:
                 self.before_update()
                 train_infos = self.trainer.train(self.buffer)
                 self.buffer.after_update()
-                if (episode == episodes - 1 or episode % self.save_interval == 0):
+                if episode % self.save_interval == 0:
                     self.save(episode)
 
-            # log information
                 if episode % self.log_interval == 0:
+                # log information
                     print("total_num_steps: ", self.total_num_steps)
-                    print("average_step_rewards: ", np.mean(self.buffer.rewards))
-                    train_infos["average_step_rewards"] = np.mean(self.buffer.rewards)
+                    # print("average_step_rewards: ", np.mean(self.buffer.rewards))
+                    # train_infos["average_step_rewards"] = np.mean(self.buffer.rewards)
                     train_infos["average_currect_rate"] = np.mean(episodic_returns)
                     self.log_infos(train_infos, self.total_num_steps)
                     episodic_returns = []
+            episode += 1
 
 
             # eval

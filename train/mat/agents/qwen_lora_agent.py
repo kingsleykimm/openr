@@ -36,16 +36,19 @@ class QwenLoRAgent:
                                                     model_name,
                                                     torch_dtype="auto",
                                                     device_map="cuda")
-        self.base_model.half().to(self.device)
+        # self.base_model.half().to(self.device)
         
         self.max_new_tokens = max_new_tokens
-        
-        if load_path is None:
-            self.actor = self._init_actor().to(self.device)
-            if self.algo != "GRPO":
-                self.critic = self._init_critic().to(self.device)
-        else:
-            self.load(load_path)
+        self.actor = self.base_model
+
+        if self.algo != "GRPO":
+            self.critic = self._init_critic().to(self.device)
+        # if load_path is None:
+        #     self.actor = self._init_actor().to(self.device)
+        #     if self.algo != "GRPO":
+        #         self.critic = self._init_critic().to(self.device)
+        # else:
+        #     self.load(load_path)
         
     
     def _init_actor(self, lora_weights = None):
@@ -75,8 +78,8 @@ class QwenLoRAgent:
                 torch_dtype=torch.bfloat16,
             )
 
-        # if torch.__version__ >= "2" and sys.platform != "win32":
-        #     model = torch.compile(model)
+        if torch.__version__ >= "2" and sys.platform != "win32":
+            model = torch.compile(model)
         
         model.half()
 
@@ -167,7 +170,6 @@ class QwenLoRAgent:
         return values
     
     def get_token_logits(self, obs, action_tokens, batch_infer=False):
-        print(obs.tolist())
         obs_token_seq = self.tokenizer(obs.tolist(), return_tensors="pt", padding=True)
         obs_input_ids = obs_token_seq["input_ids"].to("cuda")
         obs_attn_mask = obs_token_seq["attention_mask"].to("cuda")
@@ -181,18 +183,18 @@ class QwenLoRAgent:
 
         
         if batch_infer:
-            with self.actor.disable_adapter():
-                rho_logits = self.batch_infer(self.actor, obs_act_ids, obs_act_mask, obs_full_lengths, act_real_lengths)
+            # with self.actor.disable_adapter():
+            #     rho_logits = self.batch_infer(self.actor, obs_act_ids, obs_act_mask, obs_full_lengths, act_real_lengths)
                         
             pi_logits = self.batch_infer(self.actor, obs_act_ids, obs_act_mask, obs_full_lengths, act_real_lengths)
         else:
-            with self.actor.disable_adapter():
-                rho_outputs = self.actor(input_ids=obs_act_ids, attention_mask=obs_act_mask, return_dict=True)
-                rho_logits = self.get_slice(rho_outputs.logits, obs_full_lengths, act_real_lengths)
+            # with self.actor.disable_adapter():
+            #     rho_outputs = self.actor(input_ids=obs_act_ids, attention_mask=obs_act_mask, return_dict=True)
+            #     rho_logits = self.get_slice(rho_outputs.logits, obs_full_lengths, act_real_lengths)
                 
             pi_outputs = self.actor(input_ids=obs_act_ids, attention_mask=obs_act_mask, return_dict=True)
             pi_logits = self.get_slice(pi_outputs.logits, obs_full_lengths, act_real_lengths)
-        return pi_logits, rho_logits
+        return pi_logits, None
     
     def batch_infer(self, model, input_ids, attn_mask, obs_full_lengths, act_real_lengths, infer_batch_size=16):     
         logits = []

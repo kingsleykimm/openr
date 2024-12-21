@@ -71,7 +71,7 @@ def main(args):
     parser = get_config()
     all_args = parse_args(args, parser)
 
-    all_args.num_env_steps = 500
+    all_args.num_env_steps = 50000
     all_args.episode_length = 8
     all_args.n_rollout_threads = 4
     all_args.log_interval = 1

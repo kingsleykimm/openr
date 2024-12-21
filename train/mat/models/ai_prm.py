@@ -94,7 +94,6 @@ class AIPRM(nn.Module):
             new_traj = '\n'.join([f"Step {ind + 1}: {steps[ind]} ки"for ind in range(len(steps))])
             new_traj = problem + '\n' + new_traj
             # print(new_traj)
-            print("Num steps")
             max_traj_length = max(len(new_traj.split(' ')), max_traj_length)
             conversation = [
                 {

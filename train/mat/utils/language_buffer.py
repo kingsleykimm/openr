@@ -258,7 +258,7 @@ class TrajectoryLanguageBuffer(LanguageBuffer):
         # in the trajectory setting, V_{s+1} is always = 0.
         # there is the small caveat where the model response doesn't give a full answer and reaches max step but that can be later implementation.
         # self.action_level_v_values[:, -1] = next_value
-        self.masks = torch.ne(self.action_level_v_values, -100)
+        self.masks = torch.ne(torch.from_numpy(self.action_level_v_values), -100)
         
         gae = 0
         # so right now our buffer is a shape of (# of trajectories, episode_length)
