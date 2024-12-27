@@ -157,4 +157,5 @@ class AIPRM(nn.Module):
         for j in range(len(runs[0])):
             curr_trajectories = [run[j] for run in runs]
             result.append(np.mean(curr_trajectories, axis=0) - var_penalty * np.var(curr_trajectories, axis=0))
+        print(result)
         return result
