@@ -145,4 +145,16 @@ class AIPRM(nn.Module):
             # what do we do in the case that a step doesn't have a reward? 
             # regex extraction on this
 
-            
+    # takes a list of trajectories and corresponding problems and calculates reward
+    # using AI scoring. Prompts the AI n times and returns reward as the average over all
+    # queries. To add a variance penalty, specify var_penalty
+    def get_reasoning_traj_reward_avg(self, trajectories: list[str], problems: list[str], n: int,
+                                      var_penalty: float = 0.0):
+        runs = []
+        for i in range(n):
+            runs.append(self.get_reasoning_traj_reward(trajectories, problems))
+        result = []
+        for j in range(len(runs[0])):
+            curr_trajectories = [run[j] for run in runs]
+            result.append(np.mean(curr_trajectories, axis=0) - var_penalty * np.var(curr_trajectories, axis=0))
+        return result
