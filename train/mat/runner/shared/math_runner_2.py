@@ -18,7 +18,7 @@ def _t2n(x):
     return x.detach().cpu().numpy()
 
 
-class MathRunner:
+class MathRunner_avg:
     def __init__(self, config):
         self.num_agents = config['num_agents']
         self.all_args = config['all_args']

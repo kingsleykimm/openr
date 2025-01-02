@@ -10,7 +10,7 @@ import torch
 sys.path.append("../../")
 from mat.config import get_config
 from mat.envs.math.math_env_wrappers import ShareSubprocVecEnv, ShareDummyVecEnv
-from mat.runner.shared.math_runner import MathRunner as Runner
+from mat.runner.shared.math_runner_2 import MathRunner_avg as Runner
 from mat.envs.math.math_env import MathEnv, TrajectoryMathEnv
 
 def make_train_env(all_args):
