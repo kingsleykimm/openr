@@ -166,7 +166,7 @@ class MathRunner:
                     print("total_num_steps: ", self.total_num_steps)
                     # print("average_step_rewards: ", np.mean(self.buffer.rewards))
                     # train_infos["average_step_rewards"] = np.mean(self.buffer.rewards)
-                    train_infos["average_currect_rate"] = np.mean(episodic_returns)
+                    # train_infos["average_currect_rate"] = np.mean(episodic_returns)
                     self.log_infos(train_infos, self.total_num_steps)
                     episodic_returns = []
             episode += 1

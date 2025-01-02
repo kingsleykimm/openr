@@ -226,6 +226,7 @@ class TrajectoryLanguageBuffer(LanguageBuffer):
         super().__init__(args, num_agents, pad_token_id)
 
         self.max_trajectories = int(args.n_rollout_threads * 1.5)
+        self.num_trajectories = 0
         self.after_update()
     def insert_appo(self, obs, actions, value_preds, rewards, action_tokens, action_log_probs):
         """
@@ -238,7 +239,7 @@ class TrajectoryLanguageBuffer(LanguageBuffer):
         self.action_tokens[self.step] = action_tokens
         self.action_level_v_values[self.step, :-1] = value_preds
         self.action_level_log_probs[self.step] = action_log_probs
-        
+        self.num_trajectories += 1
         self.step = (self.step + 1) % self.max_trajectories
     def insert_tppo(self, obs, actions, value_preds, rewards, action_tokens, token_log_probs):
         """
@@ -253,6 +254,7 @@ class TrajectoryLanguageBuffer(LanguageBuffer):
         self.tppo_log_probs[self.step] = token_log_probs.copy()
 
         self.step = (self.step + 1) % self.max_trajectories
+        self.num_trajectories += 1
 
     def batch_process_appo(self, next_value):
         # in the trajectory setting, V_{s+1} is always = 0.
@@ -273,7 +275,7 @@ class TrajectoryLanguageBuffer(LanguageBuffer):
     def batch_process_grpo(self):
         self.masks = torch.ne(torch.from_numpy(self.action_level_v_values), -100)
         non_padded_rewards = self.rewards[self.rewards != -100]
-        
+        print("REWARDS", non_padded_rewards)
         self.action_level_advantages = (self.rewards - np.mean(non_padded_rewards)) / (np.std(non_padded_rewards) + 1e-8)
     # IGNORE TPPO FOR NOW
     # def batch_process_tppo(self, next_value):
@@ -326,20 +328,20 @@ class TrajectoryLanguageBuffer(LanguageBuffer):
         action_tokens = self.action_tokens.reshape(-1, *self.action_tokens.shape[2:])
         masks = self.masks[:, :-1].reshape(-1, *self.masks.shape[2:])
         #find valid indicies here, after flattening everything into a 1D array
-        valid_indices = np.nonzero(masks)
-        batch_size = valid_indices[0].shape[0]
-
+        valid_indices = torch.nonzero(masks)[:, 0]
+        batch_size = valid_indices.shape[0]
+        print("Batch size", batch_size)
+        print("valids", self.obs.shape)
         if mini_batch_size is None:
             if batch_size < num_mini_batch:
                 num_mini_batch = batch_size
             mini_batch_size = batch_size // num_mini_batch
-
-        rand = np.arange(batch_size)
-        np.random.shuffle(rand)
-        sampler = [rand[i * mini_batch_size:(i + 1) * mini_batch_size] for i in range(num_mini_batch)]
+        np.random.shuffle(valid_indices)
+        sampler = [valid_indices[i * mini_batch_size:(i + 1) * mini_batch_size] for i in range(num_mini_batch)] # right now sampler should contain the indices of batch_size
         for indices in sampler:
+            
             obs_batch = obs[indices]
-            print(obs_batch)
+            print("Obs batch", obs_batch)
             action_batch = actions[indices]
             value_preds_batch = value_preds[indices]
             return_batch = returns[indices]
@@ -355,24 +357,24 @@ class TrajectoryLanguageBuffer(LanguageBuffer):
     
     def after_update(self):
         self.obs = np.empty((self.max_trajectories, self.episode_length + 1, self.num_agents), dtype=np.object_)
-        # self.obs.fill(-100)
+        self.obs.fill(-100)
         self.actions = np.empty((self.max_trajectories, self.episode_length, self.num_agents, ), dtype=np.object_)
-        # self.actions.fill(-100)
+        self.actions.fill(-100)
         self.action_tokens = np.empty((self.max_trajectories, self.episode_length, self.num_agents, self.max_new_tokens), dtype=np.int64)
-        # self.action_tokens.fill(-100)
+        self.action_tokens.fill(-100)
         self.rewards = np.zeros((self.max_trajectories, self.episode_length, self.num_agents, ), dtype=np.float32)
-        # self.rewards.fill(-100)
+        self.rewards.fill(-100)
 
         
         # for action-level ppo and grpo
         self.action_level_v_values = np.zeros((self.max_trajectories, self.episode_length + 1, self.num_agents), dtype=np.float32)
-        # self.action_level_v_values.fill(-100)
+        self.action_level_v_values.fill(-100)
         self.action_level_returns = np.zeros((self.max_trajectories, self.episode_length, self.num_agents), dtype=np.float32)
-        # self.action_level_returns.fill(-100)
+        self.action_level_returns.fill(-100)
         self.action_level_advantages = np.zeros_like(self.action_level_returns)
-        # self.action_level_advantages.fill(-100)
+        self.action_level_advantages.fill(-100)
         self.action_level_log_probs = np.zeros_like(self.action_level_returns)
-        # self.action_level_log_probs.fill(-100)
+        self.action_level_log_probs.fill(-100)
         
         # for token-level ppo, impl later
         self.tppo_values = np.zeros((self.max_trajectories, self.episode_length + 1, self.max_new_tokens), dtype=np.float32)
@@ -380,3 +382,4 @@ class TrajectoryLanguageBuffer(LanguageBuffer):
         self.tppo_advantages = np.zeros_like(self.tppo_returns)
         self.tppo_log_probs = np.zeros_like(self.tppo_returns)
         self.step = 0
+        self.num_trajectories = 0

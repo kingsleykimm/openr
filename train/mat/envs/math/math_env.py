@@ -115,6 +115,7 @@ class TrajectoryMathEnv(MathEnv):
         self.reasoning_chain = self.problem + "\n"
         obs = np.array([self.current_state], dtype=np.object_)
         self.obs = np.empty((self.max_step + 1, self.n_agents), dtype=np.object_)
+        self.obs.fill(-100)
         self.actions = np.empty((self.max_step, self.n_agents), dtype=np.object_)
         self.actions.fill(-100)
         self.action_tokens = np.empty((self.max_step, self.n_agents, self.max_new_tokens), dtype=np.int64)
