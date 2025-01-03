@@ -4,7 +4,7 @@ import numpy as np
 from functools import reduce
 import torch
 from tensorboardX import SummaryWriter
-from mat.agents.qwen_lora_agent import QwenLoRAgent
+from mat.agents.qwen_lora_agent import QwenLoRAgent, LLaMAAgent
 from mat.models.ms_prm import MSProcessRM
 from mat.models.qwen_prm import QwenProcessRM
 from mat.models.ai_prm import AIPRM
@@ -42,7 +42,10 @@ class MathRunner:
 
         self.envs = config['envs']
         self.eval_envs = config['eval_envs']
-        self.agent = QwenLoRAgent(self.all_args.model_name_or_path, self.all_args.max_new_tokens, self.algo)
+        if 'mistral' in self.all_args.model_name_or_path:
+            self.agent = LLaMAAgent(self.all_args.model_name_or_path, self.all_args.max_new_tokens, self.algo)
+        else:
+            self.agent = QwenLoRAgent(self.all_args.model_name_or_path, self.all_args.max_new_tokens, self.algo)
         if self.prm_type == "AI":
             self.buffer = TrajectoryLanguageBuffer(self.all_args, self.num_agents, self.agent.tokenizer.pad_token_id)
         else:

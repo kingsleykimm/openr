@@ -137,10 +137,7 @@ class AIPRM(nn.Module):
             if len(matches) != num_steps:
                 print("ERROR: AI SCORER FAILED TO LABEL ALL STEPS")
             scores = np.array([float(match[1]) for match in matches])
-            mean, std = np.mean(scores), np.std(scores)
-            scores = (scores - mean) / (std + 1e-7)
             rewards.append(scores)
-        
         return rewards
             # what do we do in the case that a step doesn't have a reward? 
             # regex extraction on this

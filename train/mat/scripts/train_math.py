@@ -74,6 +74,7 @@ def main(args):
     all_args.num_env_steps = 50000
     all_args.episode_length = 8
     all_args.n_rollout_threads = 4
+    all_args.num_mini_batch = 16
     all_args.log_interval = 1
     all_args.critic_lr = 5e-5
     all_args.lr = 1e-6
